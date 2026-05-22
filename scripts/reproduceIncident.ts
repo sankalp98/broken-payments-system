@@ -1,10 +1,8 @@
 import path from "node:path";
-import { checkoutOrder } from "../src/checkout.js";
 import { clearAll, createOrder, getDb, listTransactionsForOrder, resetDb } from "../src/db.js";
 import {
   resetProviderState,
   setProviderRng,
-  SPIKE_PROVIDER_CONFIG,
 } from "../src/fakePaymentProvider.js";
 import { runTrafficSpikeRetries } from "../src/retryWorker.js";
 import type { Order } from "../src/types.js";
@@ -46,31 +44,25 @@ async function reproduce(): Promise<void> {
 
   const orderIds = seedOrders();
 
-  console.log("Simulating traffic spike (10:00–11:00 window)...");
-  console.log("Provider timeout-after-charge rate elevated.\n");
+  console.log("Running checkout load simulation...");
 
   await runTrafficSpikeRetries(orderIds);
 
+  let anomalyCount = 0;
   for (const orderId of orderIds) {
-    const txns = listTransactionsForOrder(orderId);
-    const successes = txns.filter((t) => t.status === "success");
+    const successes = listTransactionsForOrder(orderId).filter((t) => t.status === "success");
     if (successes.length > 1) {
+      anomalyCount += 1;
       console.log(
-        `[DUPLICATE] order=${orderId} successful_charges=${successes.length} charge_ids=${successes.map((t) => t.chargeId).join(", ")}`
+        `order=${orderId} capture_events=${successes.length} charges=${successes.map((t) => t.chargeId).join(",")}`
       );
     }
   }
 
-  const duplicateOrders = orderIds.filter((orderId) => {
-    const successes = listTransactionsForOrder(orderId).filter((t) => t.status === "success");
-    return successes.length > 1;
-  });
+  console.log(`Processed ${orderIds.length} orders. multi_capture_orders=${anomalyCount}`);
 
-  console.log(`\nProcessed ${orderIds.length} orders during spike.`);
-  console.log(`Orders with duplicate successful charges: ${duplicateOrders.length}`);
-
-  if (duplicateOrders.length === 0) {
-    console.log("No duplicates this run; re-run or widen spike window.");
+  if (anomalyCount > 0) {
+    process.exit(1);
   }
 }
 

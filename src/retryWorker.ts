@@ -5,11 +5,12 @@ import {
   SPIKE_PROVIDER_CONFIG,
   type ProviderConfig,
 } from "./fakePaymentProvider.js";
+
 export interface RetryWorkerSummary {
   processed: number;
   paid: number;
   failed: number;
-  duplicateChargeOrders: string[];
+  multiCaptureOrders: string[];
 }
 
 export async function processRetryQueue(
@@ -20,18 +21,17 @@ export async function processRetryQueue(
     processed: 0,
     paid: 0,
     failed: 0,
-    duplicateChargeOrders: [],
+    multiCaptureOrders: [],
   };
 
   for (const order of pending) {
-    const before = order.id;
-    const result = await checkoutOrder(before, providerConfig);
+    const result = await checkoutOrder(order.id, providerConfig);
     summary.processed += 1;
 
     if (result.status === "paid") {
       summary.paid += 1;
       if (result.successfulCharges > 1) {
-        summary.duplicateChargeOrders.push(result.orderId);
+        summary.multiCaptureOrders.push(result.orderId);
       }
     } else {
       summary.failed += 1;
@@ -48,7 +48,7 @@ export async function runTrafficSpikeRetries(
     processed: 0,
     paid: 0,
     failed: 0,
-    duplicateChargeOrders: [],
+    multiCaptureOrders: [],
   };
 
   await Promise.all(
@@ -69,7 +69,7 @@ export async function runTrafficSpikeRetries(
     const { listTransactionsForOrder } = await import("./db.js");
     const successes = listTransactionsForOrder(orderId).filter((t) => t.status === "success");
     if (successes.length > 1) {
-      summary.duplicateChargeOrders.push(orderId);
+      summary.multiCaptureOrders.push(orderId);
     }
   }
 

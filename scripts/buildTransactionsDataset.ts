@@ -73,7 +73,7 @@ function duplicateOrder(
         amount,
         currency,
         "success",
-        isTimeout ? "PROVIDER_TIMEOUT" : ""
+        isTimeout ? (orderId.endsWith("1") ? "PROVIDER_TIMEOUT" : "GATEWAY_TIMEOUT") : ""
       )
     );
   }

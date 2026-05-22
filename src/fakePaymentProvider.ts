@@ -1,30 +1,30 @@
 import type { ChargeRequest } from "./types.js";
 
-export type ProviderOutcome = "success" | "declined" | "timeout_after_charge";
+export type ProviderOutcome = "success" | "declined" | "late_ack";
 
 export interface ProviderConfig {
   declineRate: number;
-  timeoutAfterChargeRate: number;
+  lateAckRate: number;
   latencyMs: number;
 }
 
-export class ProviderTimeoutError extends Error {
-  readonly chargeId: string;
+export class ProviderResponseError extends Error {
+  readonly code: string;
+  readonly chargeId?: string;
 
-  constructor(chargeId: string) {
-    super(`Payment provider request timed out (charge_id=${chargeId})`);
-    this.name = "ProviderTimeoutError";
+  constructor(code: string, chargeId?: string) {
+    super(`Provider returned ${code}`);
+    this.name = "ProviderResponseError";
+    this.code = code;
     this.chargeId = chargeId;
   }
 }
 
-export class ProviderDeclinedError extends Error {
-  readonly code: string;
-
+/** @deprecated use ProviderResponseError */
+export class ProviderDeclinedError extends ProviderResponseError {
   constructor(code: string) {
-    super(`Payment declined: ${code}`);
+    super(code);
     this.name = "ProviderDeclinedError";
-    this.code = code;
   }
 }
 
@@ -54,14 +54,14 @@ function pickOutcome(config: ProviderConfig): ProviderOutcome {
   if (roll < config.declineRate) {
     return "declined";
   }
-  if (roll < config.declineRate + config.timeoutAfterChargeRate) {
-    return "timeout_after_charge";
+  if (roll < config.declineRate + config.lateAckRate) {
+    return "late_ack";
   }
   return "success";
 }
 
 export async function charge(
-  request: ChargeRequest,
+  _request: ChargeRequest,
   config: ProviderConfig
 ): Promise<{ chargeId: string }> {
   if (config.latencyMs > 0) {
@@ -72,11 +72,11 @@ export async function charge(
   const chargeId = nextChargeId();
 
   if (outcome === "declined") {
-    throw new ProviderDeclinedError("CARD_DECLINED");
+    throw new ProviderResponseError("CARD_DECLINED");
   }
 
-  if (outcome === "timeout_after_charge") {
-    throw new ProviderTimeoutError(chargeId);
+  if (outcome === "late_ack") {
+    throw new ProviderResponseError("GATEWAY_TIMEOUT", chargeId);
   }
 
   return { chargeId };
@@ -84,12 +84,12 @@ export async function charge(
 
 export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   declineRate: 0.05,
-  timeoutAfterChargeRate: 0.08,
+  lateAckRate: 0.08,
   latencyMs: 25,
 };
 
 export const SPIKE_PROVIDER_CONFIG: ProviderConfig = {
   declineRate: 0.02,
-  timeoutAfterChargeRate: 0.35,
+  lateAckRate: 0.35,
   latencyMs: 80,
 };

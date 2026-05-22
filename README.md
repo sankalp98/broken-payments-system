@@ -1,10 +1,10 @@
 # Broken Payments System — Incident 10/11
 
-Payments are paused. Users reported duplicate charges between 10:00 and 11:00. Your job is to identify affected users, generate the refund report, and fix the root cause so timeout retries do not create duplicate charges. **Do not disable retries.**
+Payments are paused. Users reported duplicate charges between 10:00 and 11:00. Your job is to identify affected users, generate the refund report, and fix the root cause so retries do not create duplicate charges for the same order. **Do not disable retries.**
 
 ## Context
 
-This repository contains the checkout service, retry worker, and transaction export from the incident window on **2025-10-11** (`data/transactions_10_11.csv`, ~150 rows). During a traffic spike, the payment provider intermittently completed charges but returned timeouts to our application. Checkout and the retry worker treated those timeouts as failures and re-attempted payment, producing duplicate successful charges for some orders.
+This repository contains the checkout service, retry worker, and transaction export from the incident window on **2025-10-11** (`data/transactions_10_11.csv`, ~150 rows). During a traffic spike, the payment provider returned intermittent errors while checkout volume was high. Some orders show multiple successful captures in the export.
 
 Regenerate the incident CSV with `npm run build:dataset` after editing `scripts/buildTransactionsDataset.ts`.
 
@@ -21,7 +21,10 @@ npm run refunds
 
 | Path | Purpose |
 |------|---------|
-| `src/checkout.ts` | Order checkout and in-request retries |
+| `src/checkout.ts` | Order checkout and in-process attempts |
+| `src/chargeFailure.ts` | Provider failure classification |
+| `src/providerClient.ts` | Provider request wrapper |
+| `src/retryPolicy.ts` | Retry eligibility helpers |
 | `src/retryWorker.ts` | Background retries for pending/failed orders |
 | `src/fakePaymentProvider.ts` | In-repo payment provider simulator |
 | `src/refundReport.ts` | Refund aggregation from transaction CSV |
@@ -35,7 +38,7 @@ For each `order_id`, only **one** successful charge should be kept. Additional s
 
 ## Reproduction
 
-`npm run reproduce` seeds orders, runs parallel checkout under elevated `timeout_after_charge` rates, and logs orders with more than one successful charge.
+`npm run reproduce` seeds orders, runs parallel checkout under load, and exits non-zero if any order has more than one successful capture.
 
 ## Refund report
 

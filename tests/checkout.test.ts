@@ -14,7 +14,7 @@ const TEST_DB = path.join(process.cwd(), "data", "test-checkout.db");
 
 const NO_NOISE_CONFIG: ProviderConfig = {
   declineRate: 0,
-  timeoutAfterChargeRate: 0,
+  lateAckRate: 0,
   latencyMs: 0,
 };
 
@@ -72,7 +72,7 @@ describe("checkout", () => {
 
     const declineThenOk: ProviderConfig = {
       declineRate: 0.5,
-      timeoutAfterChargeRate: 0,
+      lateAckRate: 0,
       latencyMs: 0,
     };
 
@@ -96,7 +96,7 @@ describe("checkout", () => {
 
     setProviderRng(deterministicSequence([0.2]));
     await expect(
-      charge(request, { declineRate: 0.1, timeoutAfterChargeRate: 0.2, latencyMs: 0 })
+      charge(request, { declineRate: 0.1, lateAckRate: 0.2, latencyMs: 0 })
     ).rejects.toThrow();
 
     setProviderRng(deterministicSequence([0.9]));

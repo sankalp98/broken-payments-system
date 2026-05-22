@@ -1,3 +1,4 @@
+import { classifyProviderFailure } from "./chargeFailure.js";
 import {
   getOrder,
   insertTransaction,
@@ -5,15 +6,12 @@ import {
   updateOrderStatus,
 } from "./db.js";
 import {
-  charge,
   DEFAULT_PROVIDER_CONFIG,
-  ProviderDeclinedError,
-  ProviderTimeoutError,
   type ProviderConfig,
 } from "./fakePaymentProvider.js";
+import { submitCharge } from "./providerClient.js";
+import { maxInProcessAttempts } from "./retryPolicy.js";
 import type { ChargeRequest } from "./types.js";
-
-const MAX_CHECKOUT_ATTEMPTS = 3;
 
 export interface CheckoutResult {
   orderId: string;
@@ -59,6 +57,16 @@ function recordAttempt(
   });
 }
 
+function paidResult(orderId: string, attempts: number): CheckoutResult {
+  const successes = listTransactionsForOrder(orderId).filter((t) => t.status === "success");
+  return {
+    orderId,
+    status: "paid",
+    attempts,
+    successfulCharges: successes.length,
+  };
+}
+
 export async function checkoutOrder(
   orderId: string,
   providerConfig: ProviderConfig = DEFAULT_PROVIDER_CONFIG
@@ -69,47 +77,35 @@ export async function checkoutOrder(
   }
 
   if (order.status === "paid") {
-    const successes = listTransactionsForOrder(orderId).filter((t) => t.status === "success");
-    return {
-      orderId,
-      status: "paid",
-      attempts: 0,
-      successfulCharges: successes.length,
-    };
+    return paidResult(orderId, 0);
   }
 
   const request = buildChargeRequest(orderId);
   let attempts = 0;
+  const attemptLimit = maxInProcessAttempts();
 
-  while (attempts < MAX_CHECKOUT_ATTEMPTS) {
+  while (attempts < attemptLimit) {
     attempts += 1;
     try {
-      const result = await charge(request, providerConfig);
+      const result = await submitCharge(request, providerConfig);
       recordAttempt(request, result.chargeId, "success", "");
       updateOrderStatus(orderId, "paid");
-      return {
-        orderId,
-        status: "paid",
-        attempts,
-        successfulCharges: listTransactionsForOrder(orderId).filter((t) => t.status === "success")
-          .length,
-      };
+      return paidResult(orderId, attempts);
     } catch (error) {
-      if (error instanceof ProviderTimeoutError) {
-        recordAttempt(request, error.chargeId, "success", "PROVIDER_TIMEOUT");
-        updateOrderStatus(orderId, "failed");
-        continue;
+      const failure = classifyProviderFailure(error, attempts);
+      recordAttempt(
+        request,
+        failure.chargeId,
+        failure.recordStatus,
+        failure.errorCode
+      );
+
+      if (failure.disposition === "settled") {
+        updateOrderStatus(orderId, "paid");
+        return paidResult(orderId, attempts);
       }
 
-      if (error instanceof ProviderDeclinedError) {
-        recordAttempt(request, `declined_${attempts}`, "failed", error.code);
-        updateOrderStatus(orderId, "failed");
-        continue;
-      }
-
-      recordAttempt(request, `error_${attempts}`, "failed", "UNKNOWN");
       updateOrderStatus(orderId, "failed");
-      continue;
     }
   }
 
