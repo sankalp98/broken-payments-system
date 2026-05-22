@@ -1,0 +1,23 @@
+{
+  "name": "broken-payments-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal incident benchmark: duplicate charges during provider timeouts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "reproduce": "tsx scripts/reproduceIncident.ts",
+    "refunds": "tsx scripts/generateRefundReport.ts",
+    "build:dataset": "tsx scripts/buildTransactionsDataset.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
