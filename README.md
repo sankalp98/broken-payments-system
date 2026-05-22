@@ -4,7 +4,7 @@ Payments are paused. Users reported duplicate charges between 10:00 and 11:00. Y
 
 ## Context
 
-This repository contains the checkout service, retry worker, and transaction export from the incident window on **2025-10-11** (`data/transactions_10_11.csv`, ~150 rows). During a traffic spike, the payment provider intermittently completed charges but returned timeouts to our application. Checkout and the retry worker treated those timeouts as failures and re-attempted payment without idempotency.
+This repository contains the checkout service, retry worker, and transaction export from the incident window on **2025-10-11** (`data/transactions_10_11.csv`, ~150 rows). During a traffic spike, the payment provider intermittently completed charges but returned timeouts to our application. Checkout and the retry worker treated those timeouts as failures and re-attempted payment, producing duplicate successful charges for some orders.
 
 Regenerate the incident CSV with `npm run build:dataset` after editing `scripts/buildTransactionsDataset.ts`.
 
@@ -45,4 +45,3 @@ For each `order_id`, only **one** successful charge should be kept. Additional s
 
 - Payments: **paused**
 - Retries: **still enabled** (do not turn off)
-- Idempotency keys: **not implemented**
